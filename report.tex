@@ -1,4 +1,4 @@
-\documentclass[conference]{assets/latex/IEEEtran}
+\documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
 %Template version as of 6/27/2024
@@ -17,11 +17,11 @@
 
 \title{CS6524 Computer Vision Lab. 2\\ Camera Calibration and Stereo Vision}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\author{\IEEEauthorblockN{1\textsuperscript{st} Dawid Jakubowski}
+\IEEEauthorblockA{\textit{Immersive Software Engineering} \\
+\textit{University of Limerick}\\
+Limerick, Ireland \\
+23384549@studentmail.ul.ie}
 \and
 \IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
 \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
@@ -38,65 +38,24 @@ email address or ORCID}
 
 \maketitle
 
-\begin{abstract}
-Describe in few words the work done, the lessons learned, and results.
-\end{abstract}
-
 \section{Introduction}
-This document contains some examples of basic {\LaTeX} functions.
+This lab investigates camera calibration and stereo vision for estimating depth from video recordings. Camera intrinsic parameters and lens distortion coefficients are first determined using checkerboard images. These parameters are then used to estimate the relative camera motion between consecutive video frames. Finally, stereo rectification and disparity estimation are used to reconstruct scene depth.
 
-\subsection{Lists}
+\section{Methodology}
+\subsection{Step 1}
+\subsection{Step 2}
+\subsection{Step 3}
+\subsection{Step 4: Recording scene video}
+Two videos were recorded using the calibrated smartphone camera, capturing static scenes containing objects at different depths. The camera was moved horizontally to introduce a baseline between consecutive frames while minimising rotation. The recordings were subsequently resized and aligned with the calibration image dimensions to ensure consistency during processing.
 
-List can be bulleted\dots
-\begin{itemize}
-\item First
-\item Second
-\item Third
-\end{itemize}
 
-Or enumerated
+\subsection{Step 5: Inter-Frame Translation & Pose Matrices}
+SIFT was used to detect and describe keypoints in consecutive video frames. Corresponding features were matched using a brute-force matcher and Lowe's ratio test with a threshold of 0.75. After correcting for lens distortion, the Essential Matrix was estimated using RANSAC and decomposed using cv2.recoverPose() to obtain the relative rotation matrix and translation direction. The Fundamental Matrix was derived using the camera intrinsics. Unreliable estimates were flagged based on pose inlier counts, inlier ratios, and rotation thresholds.
 
-\begin{enumerate}
-\item First
-\item Second
-\item Third
-\end{enumerate}
+\subsection{Step 6}
 
-\subsection{Equations}
 
-Equations can have their own environment,
-\begin{equation}
-a+b=\gamma\label{eq}
-\end{equation}
-and be reference (Equation~\ref{eq}), or can be inline and blend in the text like this: $\sum_{i=0}^{N}x_i$, like any other word.
-
-\subsection{Figures and Tables}
-
-\begin{table}
-\caption{Table Type Styles}
-\begin{center}
-\begin{tabular}{|c|c|c|c|}
-\hline
-\textbf{Table}&\multicolumn{3}{|c|}{\textbf{Table Column Head}} \\
-\cline{2-4} 
-\textbf{Head} & \textbf{\textit{Table column subhead}}& \textbf{\textit{Subhead}}& \textbf{\textit{Subhead}} \\
-\hline
-copy& More table copy$^{\mathrm{a}}$& &  \\
-\hline
-\multicolumn{4}{l}{$^{\mathrm{a}}$Sample of a Table footnote.}
-\end{tabular}
-\label{tab1}
-\end{center}
-\end{table}
-
-\begin{figure}
-% Uncomment the line below to include an image from a source file
-\centerline{\includegraphics{fig1.png}}
-\caption{Example of a figure caption.}
-\label{fig}
-\end{figure}
-
-They appear by default on top of the text, and you reference like this: Figure~\ref{fig} and Table~\ref{tab1}.
+\section{Discussion and Failure Analysis}
 
 \subsection{Citations}
 
