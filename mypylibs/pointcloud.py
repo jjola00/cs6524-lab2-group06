@@ -24,6 +24,8 @@ def save_ply(path, depth_cm, colour_bgr, K, step=2, max_jump=0.05):
     max_jump   drop pixels whose 3x3 neighbourhood varies more than this
                fraction of their depth (removes the streaks at object edges)
     """
+    if colour_bgr.ndim == 2:  # greyscale frame -> grey points
+        colour_bgr = cv2.cvtColor(colour_bgr, cv2.COLOR_GRAY2BGR)
     depth = np.nan_to_num(depth_cm.astype(np.float32), nan=0, posinf=0, neginf=0)
     valid = depth > 0
 

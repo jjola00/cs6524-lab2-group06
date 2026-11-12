@@ -13,6 +13,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 from mypylibs.camera_pose import _prepare_frame
+from mypylibs.pointcloud import save_ply
 
 
 def _matcher(minimum, number):
@@ -209,6 +210,10 @@ def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
         if not cv2.imwrite(str(detail_dir / "best_depth.png"),
                            plot.draw(image, depth, f"{video_path.stem} | {tag}")):
             raise OSError("Cannot save depth preview")
+        # Bonus: point cloud of the best frame. Rectified K comes from Q (f, cx, cy).
+        K_rect = np.array([[Q[2, 3], 0, -Q[0, 3]], [0, Q[2, 3], -Q[1, 3]], [0, 0, 1]])
+        ply = output_dir / f"{video_path.stem.replace('_', '-')}.ply"
+        metadata["ply_points"] = save_ply(ply, depth, image, K_rect)
     else:
         for name in ("best_depth.npz", "best_depth.png"):
             (detail_dir / name).unlink(missing_ok=True)
