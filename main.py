@@ -15,20 +15,21 @@ ROOT = Path(__file__).resolve().parent
 def main():
 
     input_dir = ROOT / "in"
+
+    for calibration_video in sorted(input_dir.glob("[0-9][0-9]_calibration.mp4")):
+        run_camera(calibration_video.name[:2], calibration_video)
+
+
+def run_camera(camera_id, calibration_video):
+
+    input_dir = ROOT / "in"
     output_dir = ROOT / "out"
 
     # --------------------------------------------
     # STEP 3: CAMERA CALIBRATION
     # --------------------------------------------
 
-    camera_id = "03"
-
-    calibration_video = (
-        input_dir / "03_caliberation.mp4"
-    )
-
-    if not calibration_video.is_file():
-        raise FileNotFoundError(calibration_video)
+    print(f"\n===== CAMERA {camera_id} =====")
 
     config_path = (
         input_dir / f"{camera_id}_calibration.yaml"
@@ -48,7 +49,7 @@ def main():
         output_dir,
         camera_id=camera_id,
         board_squares=config.get("board_squares", [9, 6]),
-        frame_count=config.get("frame_count", 20),
+        frame_count=config.get("frame_count", 30),
         min_sharpness=config.get("min_sharpness", 100.0),
     )
 
@@ -91,10 +92,7 @@ def main():
     # STEP 5: INTER-FRAME CAMERA POSE
     # --------------------------------------------
 
-    scene_videos = [
-        input_dir / "03_01.mp4",
-        input_dir / "03_02.mp4"
-    ]
+    scene_videos = sorted(input_dir.glob(f"{camera_id}_[0-9][0-9].mp4"))
 
     for video in scene_videos:
 

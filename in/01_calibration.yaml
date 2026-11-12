@@ -1,5 +1,5 @@
 # The current board has 9 x 6 squares, hence 8 x 5 inner corners.
 board_squares: [9, 6]
-frame_count: 20
+frame_count: 30  # best 20 are kept after calibration
 # Minimum Laplacian variance inside the detected board's bounding box.
 min_sharpness: 100.0
