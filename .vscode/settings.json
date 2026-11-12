@@ -1,0 +1,27 @@
+{
+  "latex-workshop.latex.tools": [
+    {
+      "name": "lab-docker-latexmk",
+      "command": "docker",
+      "args": [
+        "run", "--rm",
+        "-v", "%DIR%:/workspace",
+        "-w", "/workspace",
+        "jfhernandeza/ul-cs6524-cv-python-latex:opencv",
+        "latexmk", "-pdf", "-synctex=1",
+        "-interaction=nonstopmode", "-halt-on-error", "%DOCFILE%.tex"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "Lab Docker: build PDF",
+      "tools": ["lab-docker-latexmk"]
+    }
+  ],
+  "latex-workshop.latex.autoBuild.run": "onSave",
+  "latex-workshop.view.pdf.viewer": "tab",
+  "workbench.editorAssociations": {
+    "*.pdf": "latex-workshop-pdf-hook"
+  }
+}

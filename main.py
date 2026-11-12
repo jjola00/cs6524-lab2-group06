@@ -6,6 +6,7 @@ import numpy as np
 
 from mypylibs import calibration
 from mypylibs import camera_pose
+from mypylibs import stereo_depth
 from mypylibs.checkerboard import extract_checkerboard_frames
 
 
@@ -108,13 +109,26 @@ def run_camera(camera_id, calibration_video):
             video.stem
         )
 
-        camera_pose.estimate_camera_pose(
+        pose_rows = camera_pose.estimate_camera_pose(
             video_path=video,
             K=K,
             D=D,
             output_dir=pose_output,
             calibration_size=image_size,
             frame_step=1
+        )
+
+        scene_config_path = input_dir / f"{video.stem}.yaml"
+        scene_config = {}
+        if scene_config_path.is_file():
+            with scene_config_path.open(encoding="utf-8") as handle:
+                scene_config = yaml.safe_load(handle) or {}
+        if not isinstance(scene_config, dict):
+            raise ValueError(f"Invalid scene configuration: {scene_config_path}")
+        stereo_depth.create_depth_video(
+            video, K, D, image_size, pose_rows, pose_output, output_dir,
+            baseline_cm=scene_config.get("baseline_cm"),
+            max_depth_cm=scene_config.get("max_depth_cm", 500.0),
         )
 
 

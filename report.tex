@@ -23,11 +23,11 @@
 Limerick, Ireland \\
 23384549@studentmail.ul.ie}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\IEEEauthorblockN{2\textsuperscript{nd} Tiernan Scully}
+\IEEEauthorblockA{\textit{Immersive Software Engineering} \\
+\textit{University of Limerick}\\
+Limerick, Ireland \\
+23365528@studentmail.ul.ie}
 \and
 \IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
 \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
@@ -42,24 +42,76 @@ email address or ORCID}
 This lab investigates camera calibration and stereo vision for estimating depth from video recordings. Camera intrinsic parameters and lens distortion coefficients are first determined using checkerboard images. These parameters are then used to estimate the relative camera motion between consecutive video frames. Finally, stereo rectification and disparity estimation are used to reconstruct scene depth.
 
 \section{Methodology}
-\subsection{Step 1}
-\subsection{Step 2}
+\subsection{Step 1: Selecting calibration frames}
+One calibration video was supplied for each of the three cameras. Table~\ref{tab:recordings} summarises the decoded recordings. All were below the 5~MB limit and between 5 and 10 seconds long. The extraction code used the supplied calibration frames without further resizing, cropping or rotation.
+
+Every frame was checked for a complete checkerboard detection. Sharpness was measured as the variance of the greyscale Laplacian within the board's bounding box; frames scoring below 100 were rejected. The usable frames were divided into 30 groups in time order, taking the sharpest frame from each group. This spreads the candidates across the recording, although it does not guarantee different board poses. The calibration stage then retained the 20 candidates with the lowest initial reprojection errors and fitted the model again. Colour frames, greyscale images, corner overlays and source-frame indices were saved for inspection.
+
+\begin{table}[htbp]
+\caption{Calibration recordings and frames passing the detection and sharpness checks. Sizes use decimal MB.}
+\label{tab:recordings}
+\centering
+\begin{tabular}{c c c c c}
+\hline
+Camera & Resolution & Duration (s) & Size (MB) & Usable/total \\
+\hline
+01 & $848\times478$ & 5.18 & 1.06 & 140/154 \\
+02 & $854\times480$ & 7.55 & 1.84 & 198/219 \\
+03 & $848\times478$ & 5.63 & 1.17 & 165/168 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Step 2: Checkerboard corner detection}
+Frames were converted to greyscale and processed with \texttt{cv2.findChessboardCorners}. The recorded board has $9\times6$ squares, giving $8\times5$ inner corners (40 points), rather than the $9\times6$ inner-corner grid stated in the brief. The cell side length remained 2.5~cm. Only complete detections were used. Corner coordinates were refined using \texttt{cv2.cornerSubPix} with a $5\times5$ search-window half-size, stopping after 40 iterations or movement below 0.001 pixels. Sub-pixel refinement improves localisation, but cannot correct a warped board, reflections or limited viewpoint variation.
 \subsection{Step 3}
 \subsection{Step 4: Recording scene video}
 Two videos were recorded using the calibrated smartphone camera, capturing static scenes containing objects at different depths. The camera was moved horizontally to introduce a baseline between consecutive frames while minimising rotation. The recordings were subsequently resized and aligned with the calibration image dimensions to ensure consistency during processing.
 
 
-\subsection{Step 5: Inter-Frame Translation & Pose Matrices}
+\subsection{Step 5: Inter-Frame Translation \& Pose Matrices}
 SIFT was used to detect and describe keypoints in consecutive video frames. Corresponding features were matched using a brute-force matcher and Lowe's ratio test with a threshold of 0.75. After correcting for lens distortion, the Essential Matrix was estimated using RANSAC and decomposed using cv2.recoverPose() to obtain the relative rotation matrix and translation direction. The Fundamental Matrix was derived using the camera intrinsics. Unreliable estimates were flagged based on pose inlier counts, inlier ratios, and rotation thresholds.
 
-\subsection{Step 6}
+\subsection{Step 6: Dense stereo and depth}
+Depth was computed for consecutive frame pairs using the calibrated $K,D$ and the relative $R,t$ from Step~5, following OpenCV's rectification and reprojection interfaces~\cite{opencvCalibration}. Scene frames used the same rotation and resizing as pose estimation. Only poses passing the existing inlier and rotation checks were used; rejected pairs produced a labelled blank depth map, preserving their position in the output video.
+
+\texttt{cv2.stereoRectify} generated rectification rotations, projection matrices and the reprojection matrix $Q$. Images were resampled with \texttt{initUndistortRectifyMap} and \texttt{remap}. StereoSGBM used a block size of 5, smoothness penalties $P_1=200$, $P_2=800$, a uniqueness ratio of 10 and up to 128 disparity levels. The search sign followed the rectified translation. Vertical stereo pairs were transposed for horizontal matching and restored afterwards. Fixed-point disparities were divided by 16 before applying $Q$ to recover depth, equivalent to
+\begin{equation}
+Z=\frac{fB}{d},
+\end{equation}
+where $f$ is the rectified focal length in pixels, $B$ the baseline and $d$ the signed disparity.
+
+Rectification borders, disparities below 0.5 pixels in magnitude, left--right inconsistencies above 1.5 pixels, non-positive depths and values beyond 500~cm were masked black. Each scene was exported as \texttt{XX-YY.mp4}, using Matplotlib with a fixed 0--500~cm colour scale. Per-pair validity statistics and the frame with the most valid pixels were also saved.
+
+Crucially, \texttt{recoverPose} returns a unit translation direction, not a measured baseline. No independent scene baseline was supplied, so these outputs explicitly assume 1~cm between consecutive frames. Their colour scales are therefore conditional on this assumption, not validated physical distances. The 2.5~cm calibration cells do not determine camera travel in the separate scene recordings.
 
 
 \section{Discussion and Failure Analysis}
+\subsection{Frame selection and corner quality}
+All three recordings supplied more than 30 sharp, detectable frames. However, high Laplacian variance only indicates strong edges: it does not establish accurate corners or independent viewpoints. Reflections were visible on camera~03's checkerboard. Selecting frames by their calibration residual reduces the fitting error, but that error is measured on the retained data and is not an independent accuracy test. A better recording would use a flat, rigid board, diffuse lighting and a wider range of board positions and tilts. The board dimensions used by the implementation must also be distinguished from those specified in the brief.
 
-\subsection{Citations}
+\subsection{Depth coverage and limitations}
+Table~\ref{tab:depth} records pairs with at least one valid depth pixel in the saved run; it does not imply a dense or accurate reconstruction of each frame. Camera~01 scene~01 produced no depth because every pose was flagged. The other scenes produced intermittent maps, with invalid regions shown in black rather than filled with invented values. The existing pose checks therefore limit coverage before dense matching begins. Small inter-frame parallax, uncertain poses and textureless surfaces are possible contributors; the current results do not isolate their individual effects.
 
-If you need to cite external sources, use the \texttt{assets/latex/report.bib} file. As an example, here's how you cite the textbook~\cite{foundationsCVbook}.
+\begin{table}[htbp]
+\caption{Consecutive pairs with any valid depth in the saved run. All distances use the assumed 1~cm baseline.}
+\label{tab:depth}
+\centering
+\begin{tabular}{c r r}
+\hline
+Scene & Total pairs & Pairs with depth \\
+\hline
+01\_01 & 53 & 0 \\
+01\_02 & 54 & 6 \\
+02\_01 & 164 & 11 \\
+02\_02 & 165 & 3 \\
+03\_01 & 100 & 19 \\
+03\_02 & 112 & 11 \\
+\hline
+\end{tabular}
+\end{table}
+
+The full local pipeline generated six decodable videos. Five automated tests also passed locally and in the supplied Docker image, covering known synthetic shifts along both axes and directions, baseline scaling, invalid geometry, textureless inputs and video timing. These checks verify implementation behaviour, not the accuracy of the phone-scene depths. A measured baseline and reference object distances are needed for physical validation. Further work should check the scene/calibration image alignment, improve sideways translation during recording and compare recovered depth with measured distances. The current outputs demonstrate partial disparity reconstruction, not reliable centimetre-scale scene measurement.
 
 \printbibliography
 
