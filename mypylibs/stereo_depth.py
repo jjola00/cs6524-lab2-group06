@@ -115,9 +115,10 @@ class _DepthPlot:
 
 def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
                        output_dir, baseline_cm=None, max_depth_cm=500.0):
-    """Render every consecutive pair; flagged poses produce labelled blank maps.
+    """Render every pose pair; flagged poses produce labelled blank maps.
 
-    baseline_cm is the constant per-pair distance, not total camera travel.
+    baseline_cm is the camera travel between consecutive frames, not total
+    travel; pairs frame_step apart use frame_step x baseline_cm.
     Without it, a 1 cm assumption is labelled, not claimed as a measurement.
     """
     assumed = baseline_cm is None
@@ -130,8 +131,8 @@ def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
     destination = output_dir / f"{video_path.stem.replace('_', '-')}.mp4"
     detail_dir = output_dir / f"{video_path.stem}_depth"
     detail_dir.mkdir(parents=True, exist_ok=True)
-    label = ("ASSUMED SCALE: 1 cm per frame pair; not measured physical depth"
-             if assumed else f"Configured baseline: {baseline:g} cm per frame pair")
+    label = ("ASSUMED SCALE: 1 cm per frame; not measured physical depth"
+             if assumed else f"Configured baseline: {baseline:g} cm per frame")
     print(f"\nSTEP 6: {video_path.name}: {label}")
     capture = cv2.VideoCapture(str(video_path))
     writer, best = None, None
@@ -142,19 +143,23 @@ def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not np.isfinite(fps) or fps <= 0:
             raise ValueError(f"Invalid FPS in {video_path}")
-        ok, raw = capture.read()
-        if not ok:
-            raise ValueError(f"No frames in {video_path}")
-        previous = _prepare_frame(raw, calibration_size, "ccw")
-        plot = _DepthPlot(previous.shape, maximum, label)
-        for index, pose in enumerate(pose_rows):
+        frames = []
+        while True:
             ok, raw = capture.read()
             if not ok:
-                raise RuntimeError("Video ended before the last pose pair")
-            current = _prepare_frame(raw, calibration_size, "ccw")
-            tag = f"frames_{index+1:03d}_{index+2:03d}"
-            if pose["pair"] != tag:
-                raise ValueError("Depth requires consecutive pose rows in source order")
+                break
+            frames.append(_prepare_frame(raw, calibration_size, "ccw"))
+        if not frames:
+            raise ValueError(f"No frames in {video_path}")
+        plot = _DepthPlot(frames[0].shape, maximum, label)
+        for pose in pose_rows:
+            tag = pose["pair"]
+            # Pose tags are frames_<i>_<j> (1-based); the pair may be several frames apart
+            i, j = (int(n) - 1 for n in tag.split("_")[1:3])
+            if not 0 <= i < j < len(frames):
+                raise ValueError(f"Pose pair {tag} is outside the video")
+            previous, current = frames[i], frames[j]
+            pair_baseline = baseline * (j - i)
             image = previous
             depth = np.full(previous.shape, np.nan, np.float32)
             status = "POSE_FLAGGED"
@@ -163,7 +168,7 @@ def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
                     R = np.loadtxt(pose_dir / f"{tag}_R.csv", delimiter=",")
                     t = np.loadtxt(pose_dir / f"{tag}_t.csv", delimiter=",")
                     image, disparity, depth, Q = calculate_depth(
-                        previous, current, K, D, R, t, baseline, maximum,
+                        previous, current, K, D, R, t, pair_baseline, maximum,
                     )
                     count = int(np.isfinite(depth).sum())
                     status = "OK" if count else "NO_VALID_DISPARITY"
@@ -184,9 +189,6 @@ def create_depth_video(video_path, K, D, calibration_size, pose_rows, pose_dir,
                 if not writer.isOpened():
                     raise OSError(f"Cannot create {destination}")
             writer.write(frame)
-            previous = current
-        if capture.read()[0]:
-            raise RuntimeError("Pose rows do not cover all consecutive frame pairs")
         if not rows:
             raise ValueError("No consecutive pairs to render")
     finally:

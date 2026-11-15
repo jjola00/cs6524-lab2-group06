@@ -11,6 +11,7 @@ from mypylibs.checkerboard import extract_checkerboard_frames
 
 
 ROOT = Path(__file__).resolve().parent
+FRAME_STEP = 10  # default frame gap for stereo pairs; override per scene in in/XX_YY.yaml
 
 
 def main():
@@ -109,15 +110,6 @@ def run_camera(camera_id, calibration_video):
             video.stem
         )
 
-        pose_rows = camera_pose.estimate_camera_pose(
-            video_path=video,
-            K=K,
-            D=D,
-            output_dir=pose_output,
-            calibration_size=image_size,
-            frame_step=1
-        )
-
         scene_config_path = input_dir / f"{video.stem}.yaml"
         scene_config = {}
         if scene_config_path.is_file():
@@ -125,6 +117,18 @@ def run_camera(camera_id, calibration_video):
                 scene_config = yaml.safe_load(handle) or {}
         if not isinstance(scene_config, dict):
             raise ValueError(f"Invalid scene configuration: {scene_config_path}")
+
+        # Compare frames several apart: consecutive frames move too little
+        # for measurable disparity on distant objects
+        pose_rows = camera_pose.estimate_camera_pose(
+            video_path=video,
+            K=K,
+            D=D,
+            output_dir=pose_output,
+            calibration_size=image_size,
+            frame_step=scene_config.get("frame_step", FRAME_STEP)
+        )
+
         stereo_depth.create_depth_video(
             video, K, D, image_size, pose_rows, pose_output, output_dir,
             baseline_cm=scene_config.get("baseline_cm"),

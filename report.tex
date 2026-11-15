@@ -29,17 +29,17 @@ Limerick, Ireland \\
 Limerick, Ireland \\
 23365528@studentmail.ul.ie}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\IEEEauthorblockN{3\textsuperscript{rd} Oluwajomiloju Olajitan}
+\IEEEauthorblockA{\textit{Immersive Software Engineering} \\
+\textit{University of Limerick}\\
+Limerick, Ireland \\
+23373326@studentmail.ul.ie}
 }
 
 \maketitle
 
 \section{Introduction}
-This lab investigates camera calibration and stereo vision for estimating depth from video recordings. Camera intrinsic parameters and lens distortion coefficients are first determined using checkerboard images. These parameters are then used to estimate the relative camera motion between consecutive video frames. Finally, stereo rectification and disparity estimation are used to reconstruct scene depth.
+This lab investigates camera calibration and stereo vision for estimating depth from video recordings. Camera intrinsic parameters and lens distortion coefficients are first determined using checkerboard images. These parameters are then used to estimate the relative camera motion between video frames. Finally, stereo rectification and disparity estimation are used to reconstruct scene depth.
 
 \section{Methodology}
 \subsection{Step 1: Selecting calibration frames}
@@ -64,16 +64,43 @@ Camera & Resolution & Duration (s) & Size (MB) & Usable/total \\
 
 \subsection{Step 2: Checkerboard corner detection}
 Frames were converted to greyscale and processed with \texttt{cv2.findChessboardCorners}. The recorded board has $9\times6$ squares, giving $8\times5$ inner corners (40 points), rather than the $9\times6$ inner-corner grid stated in the brief. The cell side length remained 2.5~cm. Only complete detections were used. Corner coordinates were refined using \texttt{cv2.cornerSubPix} with a $5\times5$ search-window half-size, stopping after 40 iterations or movement below 0.001 pixels. Sub-pixel refinement improves localisation, but cannot correct a warped board, reflections or limited viewpoint variation.
-\subsection{Step 3}
+\subsection{Step 3: Camera intrinsics}
+The 40 inner corners were assigned world coordinates $(i\cdot s, j\cdot s, 0)$ with $s=2.5$~cm, so all later distances are expressed in centimetres. These object points and the refined image corners from each frame were passed to \texttt{cv2.calibrateCamera}, which returned $K$, the distortion vector and a board pose for every frame. The mean reprojection error was computed separately by projecting the board corners with \texttt{cv2.projectPoints} and averaging the Euclidean distance to the detected corners, since the value returned by \texttt{calibrateCamera} is an RMS error rather than a mean.
+
+Two choices were needed to obtain a stable result. First, $k_3$ was fixed at zero with \texttt{CALIB\_FIX\_K3}. When left free on camera~01, $k_3$ changed from $-1.32$ to $+0.63$ after adding a single frame and reached $-21.2$ on the final frame set, with $k_2=4.98$, while fixing it changed the mean error only from 0.388 to 0.386 pixels. The board stayed between 39 and 50~cm from the camera and was rarely tilted or placed near the image border, so the data did not constrain the higher order radial term. Second, calibrating from the 30 candidate frames and keeping the 20 with the lowest per-frame error reduced camera~03's error from 0.54 to 0.37 pixels, as three frames with motion blur had errors near 1~pixel. Table~\ref{tab:intrinsics} lists the results, which were saved as \texttt{XX\_K.csv} and \texttt{XX\_D.csv}.
+
+\begin{table}[htbp]
+\caption{Calibrated intrinsics. Skew is zero for all cameras because OpenCV's model assumes it, and $k_3$ was fixed at zero.}
+\label{tab:intrinsics}
+\centering
+\begin{tabular}{l r r r}
+\hline
+ & Camera 01 & Camera 02 & Camera 03 \\
+\hline
+$f_x$ (px) & 682.89 & 805.68 & 815.86 \\
+$f_y$ (px) & 681.67 & 805.50 & 814.71 \\
+$c_x$ (px) & 414.37 & 419.09 & 457.60 \\
+$c_y$ (px) & 219.05 & 224.45 & 227.04 \\
+$k_1$ & $-0.118$ & 0.275 & 0.155 \\
+$k_2$ & 0.468 & $-1.026$ & $-0.632$ \\
+$p_1$ & 0.0011 & $-0.0107$ & $-0.0050$ \\
+$p_2$ & $-0.0015$ & $-0.0061$ & 0.0124 \\
+Mean error (px) & 0.30 & 0.16 & 0.37 \\
+\hline
+\end{tabular}
+\end{table}
+
+All three cameras met the 0.5~pixel target. In each case $f_x$ and $f_y$ agree to within 0.2\%, consistent with square pixels. The principal points of cameras~01 and~02 lie within 20~pixels of the image centre, while camera~03's $c_x$ is 34~pixels to the right of it. The sign of $k_1$ differs between camera~01 and the other two, with $k_2$ taking the opposite sign in each case. This suggests the two radial terms are partly trading off against each other rather than describing the lenses precisely, a further consequence of the limited board coverage near the image edges.
+
 \subsection{Step 4: Recording scene video}
 Two videos were recorded using the calibrated smartphone camera, capturing static scenes containing objects at different depths. The camera was moved horizontally to introduce a baseline between consecutive frames while minimising rotation. The recordings were subsequently resized and aligned with the calibration image dimensions to ensure consistency during processing.
 
 
 \subsection{Step 5: Inter-Frame Translation \& Pose Matrices}
-SIFT was used to detect and describe keypoints in consecutive video frames. Corresponding features were matched using a brute-force matcher and Lowe's ratio test with a threshold of 0.75. After correcting for lens distortion, the Essential Matrix was estimated using RANSAC and decomposed using cv2.recoverPose() to obtain the relative rotation matrix and translation direction. The Fundamental Matrix was derived using the camera intrinsics. Unreliable estimates were flagged based on pose inlier counts, inlier ratios, and rotation thresholds.
+SIFT was used to detect and describe keypoints in pairs of video frames ten frames apart. Corresponding features were matched using a brute-force matcher and Lowe's ratio test with a threshold of 0.75. After correcting for lens distortion, the Essential Matrix was estimated using RANSAC and decomposed using cv2.recoverPose() to obtain the relative rotation matrix and translation direction. The Fundamental Matrix was derived using the camera intrinsics. Unreliable estimates were flagged based on pose inlier counts, inlier ratios, and rotation thresholds.
 
 \subsection{Step 6: Dense stereo and depth}
-Depth was computed for consecutive frame pairs using the calibrated $K,D$ and the relative $R,t$ from Step~5, following OpenCV's rectification and reprojection interfaces~\cite{opencvCalibration}. Scene frames used the same rotation and resizing as pose estimation. Only poses passing the existing inlier and rotation checks were used; rejected pairs produced a labelled blank depth map, preserving their position in the output video.
+Depth was computed for frame pairs ten frames apart using the calibrated $K,D$ and the relative $R,t$ from Step~5, following OpenCV's rectification and reprojection interfaces~\cite{opencvCalibration}. Scene frames used the same rotation and resizing as pose estimation. Only poses passing the existing inlier and rotation checks were used; rejected pairs produced a labelled blank depth map, preserving their position in the output video.
 
 \texttt{cv2.stereoRectify} generated rectification rotations, projection matrices and the reprojection matrix $Q$. Images were resampled with \texttt{initUndistortRectifyMap} and \texttt{remap}. StereoSGBM used a block size of 5, smoothness penalties $P_1=200$, $P_2=800$, a uniqueness ratio of 10 and up to 128 disparity levels. The search sign followed the rectified translation. Vertical stereo pairs were transposed for horizontal matching and restored afterwards. Fixed-point disparities were divided by 16 before applying $Q$ to recover depth, equivalent to
 \begin{equation}
@@ -83,35 +110,41 @@ where $f$ is the rectified focal length in pixels, $B$ the baseline and $d$ the 
 
 Rectification borders, disparities below 0.5 pixels in magnitude, left--right inconsistencies above 1.5 pixels, non-positive depths and values beyond 500~cm were masked black. Each scene was exported as \texttt{XX-YY.mp4}, using Matplotlib with a fixed 0--500~cm colour scale. Per-pair validity statistics and the frame with the most valid pixels were also saved.
 
-Crucially, \texttt{recoverPose} returns a unit translation direction, not a measured baseline. No independent scene baseline was supplied, so these outputs explicitly assume 1~cm between consecutive frames. Their colour scales are therefore conditional on this assumption, not validated physical distances. The 2.5~cm calibration cells do not determine camera travel in the separate scene recordings.
+Crucially, \texttt{recoverPose} returns a unit translation direction, not a measured baseline. For camera~01 the total sideways travel of roughly 90~cm was estimated after recording and divided by the number of frames, giving 0.83 and 0.99~cm per frame for scenes 01 and 02. No baseline was supplied for cameras~02 and~03, so their outputs assume 1~cm per frame. Each pair uses the per-frame baseline multiplied by the ten-frame gap. All colour scales are therefore conditional on these estimates, not validated physical distances. The 2.5~cm calibration cells do not determine camera travel in the separate scene recordings.
 
+Consecutive frames were initially paired, but the resulting baseline of under 1~cm gave a disparity of roughly 2 pixels for an object 3~m away, too small for reliable block matching. Pairing frames ten apart increased the baseline tenfold and raised the number of accepted poses in every scene tested, for example from 18 to 48 of the pairs in scene 01\_01.
+
+\subsection{Bonus: Point clouds}
+For each scene, the frame pair with the most valid depth pixels was exported as \texttt{XX-YY.ply}. Each pixel $(u,v)$ with depth $Z$ was back-projected using $X=(u-c_x)Z/f$ and $Y=(v-c_y)Z/f$, where $f$, $c_x$ and $c_y$ were read from the rectification matrix $Q$ rather than the original $K$, because rectification changes the effective intrinsics. Points were then filtered to keep the scene readable. Invalid depths and values outside the 2nd to 98th percentile were removed, as were pixels whose $3\times3$ neighbourhood spanned more than 5\% of their own depth. The latter removes the streaks that block matching produces between a foreground object and the background behind it. Every second pixel in each direction was kept to limit file size, giving between 36,755 and 72,373 points per scene. Points take the grey level of the rectified frame, and $Y$ and $Z$ were negated so that the scene appears upright and facing the viewer in CloudCompare. Open3D is not available in the Docker image, so the ASCII PLY files were written directly with NumPy. Because the depth scale depends on the estimated baselines discussed above, the clouds show the relative arrangement of the scene more reliably than its absolute size.
 
 \section{Discussion and Failure Analysis}
 \subsection{Frame selection and corner quality}
 All three recordings supplied more than 30 sharp, detectable frames. However, high Laplacian variance only indicates strong edges: it does not establish accurate corners or independent viewpoints. Reflections were visible on camera~03's checkerboard. Selecting frames by their calibration residual reduces the fitting error, but that error is measured on the retained data and is not an independent accuracy test. A better recording would use a flat, rigid board, diffuse lighting and a wider range of board positions and tilts. The board dimensions used by the implementation must also be distinguished from those specified in the brief.
 
 \subsection{Depth coverage and limitations}
-Table~\ref{tab:depth} records pairs with at least one valid depth pixel in the saved run; it does not imply a dense or accurate reconstruction of each frame. Camera~01 scene~01 produced no depth because every pose was flagged. The other scenes produced intermittent maps, with invalid regions shown in black rather than filled with invented values. The existing pose checks therefore limit coverage before dense matching begins. Small inter-frame parallax, uncertain poses and textureless surfaces are possible contributors; the current results do not isolate their individual effects.
+Table~\ref{tab:depth} records pairs with at least one valid depth pixel in the saved run; it does not imply a dense or accurate reconstruction of each frame. With the ten-frame gap, every scene produced depth in 47\% to 85\% of its pairs. The remaining pairs were rejected by the pose checks, and invalid regions are shown in black rather than filled with invented values. Uncertain poses and textureless surfaces such as the carpet in camera~01's scenes remain the main limits on coverage.
+
+The recovered depths are not yet consistent across frame gaps. In a test on scene 01\_01, the median depth of the best frame rose from 38~cm with consecutive frames to 104, 282 and 404~cm with gaps of 5, 10 and 15. Correct depths should not depend on the gap, so either the disparity does not grow in proportion to the baseline or the estimated pose direction changes with the gap. A fixed reference distance in each scene would be needed to determine which.
 
 \begin{table}[htbp]
-\caption{Consecutive pairs with any valid depth in the saved run. All distances use the assumed 1~cm baseline.}
+\caption{Frame pairs ten frames apart with any valid depth in the saved run. Camera~01 uses its estimated baseline; cameras~02 and~03 use the assumed 1~cm per frame.}
 \label{tab:depth}
 \centering
 \begin{tabular}{c r r}
 \hline
 Scene & Total pairs & Pairs with depth \\
 \hline
-01\_01 & 53 & 0 \\
-01\_02 & 54 & 6 \\
-02\_01 & 164 & 11 \\
-02\_02 & 165 & 3 \\
-03\_01 & 100 & 19 \\
-03\_02 & 112 & 11 \\
+01\_01 & 99 & 48 \\
+01\_02 & 82 & 40 \\
+02\_01 & 155 & 110 \\
+02\_02 & 156 & 74 \\
+03\_01 & 91 & 60 \\
+03\_02 & 103 & 88 \\
 \hline
 \end{tabular}
 \end{table}
 
-The full local pipeline generated six decodable videos. Five automated tests also passed locally and in the supplied Docker image, covering known synthetic shifts along both axes and directions, baseline scaling, invalid geometry, textureless inputs and video timing. These checks verify implementation behaviour, not the accuracy of the phone-scene depths. A measured baseline and reference object distances are needed for physical validation. Further work should check the scene/calibration image alignment, improve sideways translation during recording and compare recovered depth with measured distances. The current outputs demonstrate partial disparity reconstruction, not reliable centimetre-scale scene measurement.
+The full local pipeline generated six decodable depth videos and six point clouds, one per scene, taken from the frame with the most valid depth. Five automated tests also passed locally and in the supplied Docker image, covering known synthetic shifts along both axes and directions, baseline scaling, invalid geometry, textureless inputs and video timing. These checks verify implementation behaviour, not the accuracy of the phone-scene depths. Measured baselines for every scene and reference object distances are needed for physical validation. Further work should check the scene/calibration image alignment, improve sideways translation during recording and compare recovered depth with measured distances. The current outputs demonstrate partial disparity reconstruction, not reliable centimetre-scale scene measurement.
 
 \printbibliography
 
